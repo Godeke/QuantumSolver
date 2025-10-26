@@ -4,6 +4,7 @@ from .gates import SUPPORTED_GATES, Gate, GateOperation
 from .persistence import result_to_payload, write_result
 from .state import QuantumState
 from .solver import GateSequenceSolver, SolverResult
+from .timeline import render_timeline
 
 __all__ = [
     "QuantumState",
@@ -14,4 +15,5 @@ __all__ = [
     "SolverResult",
     "result_to_payload",
     "write_result",
+    "render_timeline",
 ]

@@ -13,13 +13,14 @@ The project uses the Python standard library only. Any Python 3.10+ interpreter 
    ```bash
    PYTHONPATH=src python3 -m quantum_solver.cli --config examples/bell_state.json
    ```
-   Use `--max-layers`, `--allowed-gates`, or `--output` flags to override the configuration file. For example:
+   Use `--max-layers`, `--allowed-gates`, `--output`, or `--no-timeline` to control execution. For example:
    ```bash
    PYTHONPATH=src python3 -m quantum_solver.cli \
      --config examples/bell_state.json \
      --output artifacts/bell_result.json
    ```
    The `--output -` form prints the persisted result JSON to stdout.
+   The CLI renders an ASCII timeline by default to help visualise the state after each gate.
 
 ## Configuration schema
 

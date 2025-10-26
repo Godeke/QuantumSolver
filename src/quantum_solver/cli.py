@@ -10,6 +10,7 @@ from typing import Iterable, List, Sequence
 
 from .persistence import result_to_payload, write_result
 from .solver import GateSequenceSolver
+from .timeline import render_timeline
 from .state import QuantumState
 
 
@@ -74,6 +75,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Override the allowed gates list supplied in the config file.",
     )
     parser.add_argument(
+        "--no-timeline",
+        dest="timeline",
+        action="store_false",
+        help="Disable ASCII timeline output.",
+    )
+    parser.set_defaults(timeline=True)
+    parser.add_argument(
         "--output",
         help="Persist the solver result JSON to this path. Use '-' for stdout.",
     )
@@ -124,6 +132,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     result = solver.solve(initial_state, target_state, max_layers=max_layers)
     _print_result(result, num_qubits=num_qubits, max_layers=max_layers)
+    if args.timeline:
+        print()
+        timeline = render_timeline(
+            initial_state,
+            result.sequence,
+            intermediate_states=result.states,
+            final_state=result.final_state,
+        )
+        print(timeline)
     output_path = args.output if args.output is not None else config.get("output_path")
     if output_path:
         payload = result_to_payload(result)

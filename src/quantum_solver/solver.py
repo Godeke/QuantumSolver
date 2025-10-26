@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .gates import SUPPORTED_GATES, Gate, GateOperation
 from .state import QuantumState
@@ -20,6 +20,7 @@ class SolverResult:
     layers_used: int
     final_state: QuantumState
     distance: float
+    states: List[QuantumState]
 
     def as_gate_names(self) -> List[str]:
         return [op.describe() for op in self.sequence]
@@ -80,6 +81,16 @@ class GateSequenceSolver:
             key_parts.append(int(round(amplitude.imag * scale)))
         return tuple(key_parts)
 
+    def _evolve_states(
+        self, start: QuantumState, sequence: Sequence[GateOperation]
+    ) -> List[QuantumState]:
+        states: List[QuantumState] = []
+        current = start
+        for operation in sequence:
+            current = current.apply(operation)
+            states.append(current)
+        return states
+
     def solve(
         self,
         start: QuantumState,
@@ -98,6 +109,7 @@ class GateSequenceSolver:
                 layers_used=0,
                 final_state=start.copy(),
                 distance=initial_distance,
+                states=[],
             )
 
         frontier = deque([(start.amplitudes, [])])
@@ -124,12 +136,14 @@ class GateSequenceSolver:
                     best_sequence = list(new_sequence)
 
                 if new_distance <= self.tolerance:
+                    states = self._evolve_states(start, new_sequence)
                     return SolverResult(
                         success=True,
                         sequence=new_sequence,
                         layers_used=len(new_sequence),
-                        final_state=new_state,
+                        final_state=states[-1] if states else start.copy(),
                         distance=new_distance,
+                        states=states,
                     )
 
                 key = self._state_key(new_state.amplitudes)
@@ -138,11 +152,14 @@ class GateSequenceSolver:
                     visited[key] = len(new_sequence)
                     frontier.append((new_state.amplitudes, new_sequence))
 
+        states = self._evolve_states(start, best_sequence)
+        final_state = states[-1] if states else best_state
+
         return SolverResult(
             success=False,
             sequence=best_sequence,
             layers_used=len(best_sequence),
-            final_state=best_state,
+            final_state=final_state,
             distance=best_distance,
+            states=states,
         )
-
