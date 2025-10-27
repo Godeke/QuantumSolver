@@ -82,6 +82,52 @@ def _parse_fixed_gates(raw: object, *, num_qubits: int) -> Dict[int, GateOperati
     return fixed_operations
 
 
+def _parse_layer_gate_constraints(raw: object) -> Dict[int, List[str]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, list):
+        raise ValueError("Configuration field 'layer_gate_constraints' must be a list.")
+
+    constraints: Dict[int, List[str]] = {}
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(
+                "Entries in 'layer_gate_constraints' must contain 'step' and 'allowed_gates'."
+            )
+        step_value = item.get("step", item.get("layer"))
+        if step_value is None:
+            raise ValueError("Layer gate constraint entry is missing 'step' (1-based index).")
+        try:
+            step = int(step_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Layer gate constraint at index {index} must have integer 'step'.") from exc
+        if step <= 0:
+            raise ValueError(f"Layer gate constraint step must be positive; received {step}.")
+        layer_index = step - 1
+
+        allowed_raw = item.get("allowed_gates") or item.get("allowed")
+        if not isinstance(allowed_raw, (list, tuple)):
+            raise ValueError(f"Layer gate constraint at step {step} must list 'allowed_gates'.")
+        allowed: List[str] = []
+        seen: set[str] = set()
+        for gate_name in allowed_raw:
+            if not isinstance(gate_name, str):
+                raise ValueError(
+                    f"Layer gate constraint at step {step} includes a non-string gate name."
+                )
+            if gate_name not in seen:
+                allowed.append(gate_name)
+                seen.add(gate_name)
+
+        if not allowed:
+            raise ValueError(f"Layer gate constraint at step {step} must list at least one gate.")
+        if layer_index in constraints:
+            raise ValueError(f"Multiple gate constraints defined for step {step}.")
+        constraints[layer_index] = allowed
+
+    return constraints
+
+
 def _format_complex(value: complex, *, precision: int = 6) -> str:
     real = round(value.real, precision)
     imag = round(value.imag, precision)
@@ -185,11 +231,17 @@ def main(argv: Iterable[str] | None = None) -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
+    try:
+        layer_gate_constraints = _parse_layer_gate_constraints(config.get("layer_gate_constraints"))
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     solver = GateSequenceSolver(
         num_qubits=num_qubits,
         allowed_gates=allowed_gates,
         tolerance=float(config.get("tolerance", 1e-6)),
         fixed_operations=fixed_gates,
+        layer_gate_allowlists=layer_gate_constraints,
     )
     result = solver.solve(initial_state, target_state, max_layers=max_layers)
     _print_result(result, num_qubits=num_qubits, max_layers=max_layers)

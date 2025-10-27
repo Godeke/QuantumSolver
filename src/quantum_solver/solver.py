@@ -37,6 +37,7 @@ class GateSequenceSolver:
         tolerance: float = 1e-6,
         quantisation_decimals: int = 8,
         fixed_operations: Optional[Dict[int, GateOperation]] = None,
+        layer_gate_allowlists: Optional[Dict[int, Sequence[str]]] = None,
     ) -> None:
         if num_qubits <= 0:
             raise ValueError("Solver must operate on at least one qubit.")
@@ -53,6 +54,9 @@ class GateSequenceSolver:
             gates.append(SUPPORTED_GATES[symbol])
         self.gates = gates
         self.operations = self._build_operations()
+        self._operations_by_gate: Dict[str, List[GateOperation]] = {}
+        for operation in self.operations:
+            self._operations_by_gate.setdefault(operation.gate.name, []).append(operation)
         self.fixed_operations: Dict[int, GateOperation] = (
             dict(fixed_operations) if fixed_operations is not None else {}
         )
@@ -66,6 +70,37 @@ class GateSequenceSolver:
                         f"for {self.num_qubits}-qubit solver."
                     )
         self._fixed_layers = sorted(self.fixed_operations.keys())
+        gate_names = {gate.name for gate in self.gates}
+        self._layer_specific_operations: Dict[int, Tuple[GateOperation, ...]] = {}
+        if layer_gate_allowlists is not None:
+            for layer, allowed in layer_gate_allowlists.items():
+                if layer < 0:
+                    raise ValueError("Layer gate constraint indices must be non-negative.")
+                allowed_names = tuple(dict.fromkeys(allowed))
+                if not allowed_names:
+                    raise ValueError(f"Layer gate constraint at layer {layer} must list gates.")
+                unknown_gates = [name for name in allowed_names if name not in gate_names]
+                if unknown_gates:
+                    raise ValueError(
+                        f"Layer {layer} constraint references unsupported gates: {unknown_gates}."
+                    )
+                operations: List[GateOperation] = []
+                for name in allowed_names:
+                    ops = self._operations_by_gate.get(name)
+                    if not ops:
+                        raise ValueError(
+                            f"Layer {layer} constraint references gate '{name}' "
+                            f"which has no operations for {self.num_qubits} qubits."
+                        )
+                    operations.extend(ops)
+                self._layer_specific_operations[layer] = tuple(operations)
+        for layer, operation in self.fixed_operations.items():
+            allowed = self._layer_specific_operations.get(layer)
+            if allowed is not None and operation not in allowed:
+                raise ValueError(
+                    f"Layer {layer} has a fixed gate '{operation.gate.name}' "
+                    f"that is not allowed by the layer gate constraint."
+                )
 
     def _build_operations(self) -> List[GateOperation]:
         operations: List[GateOperation] = []
@@ -99,6 +134,9 @@ class GateSequenceSolver:
         fixed_operation = self.fixed_operations.get(depth)
         if fixed_operation is not None:
             return (fixed_operation,)
+        constrained = self._layer_specific_operations.get(depth)
+        if constrained is not None:
+            return constrained
         return self.operations
 
     def _fixed_layers_satisfied(self, sequence_length: int) -> bool:
@@ -134,6 +172,10 @@ class GateSequenceSolver:
             raise ValueError(
                 "A fixed gate is defined beyond the configured maximum number of layers."
             )
+        if self._layer_specific_operations and max(self._layer_specific_operations) >= max_layers:
+            raise ValueError(
+                "A layer gate constraint is defined beyond the configured maximum number of layers."
+            )
 
         initial_distance = start.distance(target)
         if initial_distance <= self.tolerance and not self._fixed_layers:
@@ -147,8 +189,7 @@ class GateSequenceSolver:
             )
 
         frontier = deque([(start.amplitudes, [])])
-        visited: Dict[AmplitudeKey, int] = {}
-        visited[self._state_key(start.amplitudes)] = 0
+        visited_layers: Dict[int, set[AmplitudeKey]] = {0: {self._state_key(start.amplitudes)}}
         best_state = start.copy()
         best_sequence: List[GateOperation] = []
         best_distance = initial_distance
@@ -183,9 +224,10 @@ class GateSequenceSolver:
                     )
 
                 key = self._state_key(new_state.amplitudes)
-                recorded_depth = visited.get(key)
-                if recorded_depth is None or len(new_sequence) < recorded_depth:
-                    visited[key] = len(new_sequence)
+                next_depth = len(new_sequence)
+                layer_bucket = visited_layers.setdefault(next_depth, set())
+                if key not in layer_bucket:
+                    layer_bucket.add(key)
                     frontier.append((new_state.amplitudes, new_sequence))
 
         states = self._evolve_states(start, best_sequence)

@@ -32,6 +32,9 @@ The project uses the Python standard library only. Any Python 3.10+ interpreter 
 - `fixed_gates` (list[object], optional): Gates that are enforced at specific steps. Each entry requires
   a 1-based `step`, a `gate` name, and a list of target qubits under `targets`. The solver honours these
   placements while searching the remaining layers.
+- `layer_gate_constraints` (list[object], optional): Restrict which gates may be used at particular steps.
+  Each entry provides a 1-based `step` and an `allowed_gates` list specifying the permitted symbols for
+  that layer.
 - `tolerance` (float, optional): Distance threshold for considering the target reached. Defaults to `1e-6`.
 - `output_path` (str, optional): Persist solver results as JSON. Equivalent to the `--output` CLI flag.
 
