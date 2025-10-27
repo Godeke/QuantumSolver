@@ -1,0 +1,21 @@
+{
+  "num_qubits": 1,
+  "layers": 2,
+  "initial_state": [
+    [1.0, 0.0],
+    [0.0, 0.0]
+  ],
+  "target_state": [
+    [1.0, 0.0],
+    [0.0, 0.0]
+  ],
+  "allowed_gates": ["X"],
+  "fixed_gates": [
+    {
+      "step": 2,
+      "gate": "X",
+      "targets": [0]
+    }
+  ],
+  "tolerance": 1e-6
+}

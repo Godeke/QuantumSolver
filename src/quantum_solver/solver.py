@@ -36,6 +36,7 @@ class GateSequenceSolver:
         allowed_gates: Optional[Iterable[str]] = None,
         tolerance: float = 1e-6,
         quantisation_decimals: int = 8,
+        fixed_operations: Optional[Dict[int, GateOperation]] = None,
     ) -> None:
         if num_qubits <= 0:
             raise ValueError("Solver must operate on at least one qubit.")
@@ -52,6 +53,19 @@ class GateSequenceSolver:
             gates.append(SUPPORTED_GATES[symbol])
         self.gates = gates
         self.operations = self._build_operations()
+        self.fixed_operations: Dict[int, GateOperation] = (
+            dict(fixed_operations) if fixed_operations is not None else {}
+        )
+        for layer, operation in self.fixed_operations.items():
+            if layer < 0:
+                raise ValueError("Fixed operation layers must be non-negative indices.")
+            for target in operation.targets:
+                if target < 0 or target >= self.num_qubits:
+                    raise ValueError(
+                        f"Fixed operation '{operation.describe()}' targets invalid qubit {target} "
+                        f"for {self.num_qubits}-qubit solver."
+                    )
+        self._fixed_layers = sorted(self.fixed_operations.keys())
 
     def _build_operations(self) -> List[GateOperation]:
         operations: List[GateOperation] = []
@@ -81,6 +95,21 @@ class GateSequenceSolver:
             key_parts.append(int(round(amplitude.imag * scale)))
         return tuple(key_parts)
 
+    def _operations_for_depth(self, depth: int) -> Sequence[GateOperation]:
+        fixed_operation = self.fixed_operations.get(depth)
+        if fixed_operation is not None:
+            return (fixed_operation,)
+        return self.operations
+
+    def _fixed_layers_satisfied(self, sequence_length: int) -> bool:
+        if not self._fixed_layers:
+            return True
+        last_applied_index = sequence_length - 1
+        for layer in self._fixed_layers:
+            if layer > last_applied_index:
+                return False
+        return True
+
     def _evolve_states(
         self, start: QuantumState, sequence: Sequence[GateOperation]
     ) -> List[QuantumState]:
@@ -101,8 +130,13 @@ class GateSequenceSolver:
         if start.num_qubits != self.num_qubits or target.num_qubits != self.num_qubits:
             raise ValueError("Solver and states disagree on qubit count.")
 
+        if self._fixed_layers and max(self._fixed_layers) >= max_layers:
+            raise ValueError(
+                "A fixed gate is defined beyond the configured maximum number of layers."
+            )
+
         initial_distance = start.distance(target)
-        if initial_distance <= self.tolerance:
+        if initial_distance <= self.tolerance and not self._fixed_layers:
             return SolverResult(
                 success=True,
                 sequence=[],
@@ -125,7 +159,7 @@ class GateSequenceSolver:
             if depth >= max_layers:
                 continue
 
-            for operation in self.operations:
+            for operation in self._operations_for_depth(depth):
                 new_vector = operation.apply(state_vector, self.num_qubits)
                 new_state = QuantumState.from_amplitudes(new_vector, normalise=True)
                 new_distance = new_state.distance(target)
@@ -135,7 +169,9 @@ class GateSequenceSolver:
                     best_state = new_state
                     best_sequence = list(new_sequence)
 
-                if new_distance <= self.tolerance:
+                if new_distance <= self.tolerance and self._fixed_layers_satisfied(
+                    len(new_sequence)
+                ):
                     states = self._evolve_states(start, new_sequence)
                     return SolverResult(
                         success=True,

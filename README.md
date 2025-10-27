@@ -8,7 +8,7 @@ The project uses the Python standard library only. Any Python 3.10+ interpreter 
 
 ## Usage
 
-1. Prepare a JSON configuration describing the initial and target states. An example is provided in `examples/bell_state.json`.
+1. Prepare a JSON configuration describing the initial and target states. Examples are provided in `examples/bell_state.json` and `examples/fixed_gate_compensation.json`.
 2. Run the solver:
    ```bash
    PYTHONPATH=src python3 -m quantum_solver.cli --config examples/bell_state.json
@@ -29,6 +29,9 @@ The project uses the Python standard library only. Any Python 3.10+ interpreter 
 - `initial_state` (list[list[float, float]]): Complex amplitudes expressed as `[real, imag]`.
 - `target_state` (list[list[float, float]]): Desired amplitudes in the same format.
 - `allowed_gates` (list[str], optional): Gate symbols to explore. Defaults to all supported gates.
+- `fixed_gates` (list[object], optional): Gates that are enforced at specific steps. Each entry requires
+  a 1-based `step`, a `gate` name, and a list of target qubits under `targets`. The solver honours these
+  placements while searching the remaining layers.
 - `tolerance` (float, optional): Distance threshold for considering the target reached. Defaults to `1e-6`.
 - `output_path` (str, optional): Persist solver results as JSON. Equivalent to the `--output` CLI flag.
 

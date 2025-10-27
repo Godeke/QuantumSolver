@@ -6,8 +6,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Dict, Iterable, List, Sequence
 
+from .gates import GateOperation, SUPPORTED_GATES
 from .persistence import result_to_payload, write_result
 from .solver import GateSequenceSolver
 from .timeline import render_timeline
@@ -25,6 +26,60 @@ def _parse_amplitudes(raw: Sequence[Sequence[float]], label: str) -> QuantumStat
         return QuantumState.from_real_imag_pairs(raw)
     except ValueError as exc:
         raise ValueError(f"Invalid {label} state: {exc}") from exc
+
+
+def _parse_fixed_gates(raw: object, *, num_qubits: int) -> Dict[int, GateOperation]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, list):
+        raise ValueError("Configuration field 'fixed_gates' must be a list.")
+
+    fixed_operations: Dict[int, GateOperation] = {}
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(
+                "Each item in 'fixed_gates' must be an object with 'step', 'gate', and 'targets'."
+            )
+
+        step_value = item.get("step", item.get("layer"))
+        if step_value is None:
+            raise ValueError("Fixed gate entry is missing 'step' (1-based index).")
+        try:
+            step = int(step_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Fixed gate step at index {index} must be an integer.") from exc
+        if step <= 0:
+            raise ValueError(f"Fixed gate step must be positive; received {step}.")
+        layer_index = step - 1
+
+        gate_name = item.get("gate")
+        if not isinstance(gate_name, str):
+            raise ValueError(f"Fixed gate at step {step} must specify a gate name.")
+        if gate_name not in SUPPORTED_GATES:
+            raise ValueError(f"Fixed gate '{gate_name}' at step {step} is not supported.")
+
+        targets_raw = item.get("targets")
+        if not isinstance(targets_raw, (list, tuple)):
+            raise ValueError(f"Fixed gate at step {step} must define 'targets' as a list.")
+        try:
+            targets = tuple(int(target) for target in targets_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Fixed gate targets at step {step} must be integers.") from exc
+
+        for target in targets:
+            if target < 0 or target >= num_qubits:
+                raise ValueError(
+                    f"Fixed gate '{gate_name}' at step {step} targets qubit {target}, "
+                    f"but the solver is configured for {num_qubits} qubits."
+                )
+
+        if layer_index in fixed_operations:
+            raise ValueError(f"Multiple fixed gates defined for step {step}.")
+
+        operation = GateOperation(gate=SUPPORTED_GATES[gate_name], targets=targets)
+        fixed_operations[layer_index] = operation
+
+    return fixed_operations
 
 
 def _format_complex(value: complex, *, precision: int = 6) -> str:
@@ -125,10 +180,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     elif "allowed_gates" in config:
         allowed_gates = list(config["allowed_gates"])
 
+    try:
+        fixed_gates = _parse_fixed_gates(config.get("fixed_gates"), num_qubits=num_qubits)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     solver = GateSequenceSolver(
         num_qubits=num_qubits,
         allowed_gates=allowed_gates,
         tolerance=float(config.get("tolerance", 1e-6)),
+        fixed_operations=fixed_gates,
     )
     result = solver.solve(initial_state, target_state, max_layers=max_layers)
     _print_result(result, num_qubits=num_qubits, max_layers=max_layers)

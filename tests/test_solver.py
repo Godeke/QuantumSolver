@@ -3,6 +3,7 @@ import math
 import tempfile
 import unittest
 
+from quantum_solver.gates import GateOperation, SUPPORTED_GATES
 from quantum_solver.solver import GateSequenceSolver
 from quantum_solver.state import QuantumState
 from quantum_solver.timeline import render_timeline
@@ -89,6 +90,26 @@ class GateSequenceSolverTest(unittest.TestCase):
         self.assertIn("H q0", timeline)
         self.assertIn("CNOT q0->q1", timeline)
         self.assertIn("Final state:", timeline)
+
+    def test_fixed_gate_requires_compensation(self) -> None:
+        start = QuantumState.from_amplitudes([1.0, 0.0])
+        target = QuantumState.from_amplitudes([1.0, 0.0])
+        fixed = {1: GateOperation(gate=SUPPORTED_GATES["X"], targets=(0,))}
+        solver = GateSequenceSolver(num_qubits=1, allowed_gates=["X"], fixed_operations=fixed)
+        result = solver.solve(start, target, max_layers=2)
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.sequence), 2)
+        self.assertEqual([op.gate.name for op in result.sequence], ["X", "X"])
+        self.assertAlmostEqual(result.distance, 0.0, places=7)
+        self.assertEqual(result.final_state.amplitudes, target.amplitudes)
+
+    def test_fixed_gate_beyond_max_layers_raises(self) -> None:
+        start = QuantumState.from_amplitudes([1.0, 0.0])
+        target = QuantumState.from_amplitudes([1.0, 0.0])
+        fixed = {2: GateOperation(gate=SUPPORTED_GATES["X"], targets=(0,))}
+        solver = GateSequenceSolver(num_qubits=1, allowed_gates=["X"], fixed_operations=fixed)
+        with self.assertRaises(ValueError):
+            solver.solve(start, target, max_layers=2)
 
 
 if __name__ == "__main__":
