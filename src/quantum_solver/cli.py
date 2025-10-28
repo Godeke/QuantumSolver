@@ -249,6 +249,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
+    if allowed_gates is None and global_layer_gates is not None:
+        allowed_gates = list(global_layer_gates)
+    elif allowed_gates is not None and global_layer_gates is not None:
+        missing = [gate for gate in global_layer_gates if gate not in allowed_gates]
+        if missing:
+            raise SystemExit(
+                f"'global_allowed_gates' contains gates {missing} not present in 'allowed_gates'."
+            )
+
     solver = GateSequenceSolver(
         num_qubits=num_qubits,
         allowed_gates=allowed_gates,

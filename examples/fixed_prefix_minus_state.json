@@ -21,14 +21,6 @@
       0.0
     ]
   ],
-  "allowed_gates": [
-    "H",
-    "Y",
-    "S",
-    "Z",
-    "X",
-    "I"
-  ],
   "fixed_gates": [
     {
       "step": 1,
