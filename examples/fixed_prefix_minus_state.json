@@ -1,0 +1,127 @@
+{
+  "num_qubits": 1,
+  "layers": 20,
+  "initial_state": [
+    [
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "target_state": [
+    [
+      -1.4142135623730951,
+      -1.4142135623730951
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "allowed_gates": [
+    "H",
+    "Y",
+    "S",
+    "Z",
+    "X",
+    "I"
+  ],
+  "fixed_gates": [
+    {
+      "step": 1,
+      "gate": "H",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 2,
+      "gate": "S",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 3,
+      "gate": "H",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 4,
+      "gate": "I",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 5,
+      "gate": "Z",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 6,
+      "gate": "Z",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 7,
+      "gate": "I",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 8,
+      "gate": "S",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 9,
+      "gate": "S",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 10,
+      "gate": "S",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 11,
+      "gate": "S",
+      "targets": [
+        0
+      ]
+    },
+    {
+      "step": 12,
+      "gate": "I",
+      "targets": [
+        0
+      ]
+    }
+  ],
+  "global_allowed_gates": [
+    "H",
+    "Y",
+    "S",
+    "Z",
+    "X",
+    "I"
+  ],
+  "tolerance": 1e-06
+}

@@ -111,7 +111,7 @@ class GateSequenceSolverTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             solver.solve(start, target, max_layers=2)
 
-    def test_layer_gate_constraints_with_fixed_sequence(self) -> None:
+    def test_global_gate_allowlist_with_fixed_sequence(self) -> None:
         start = QuantumState.from_amplitudes([1.0, 0.0])
         target = QuantumState.from_amplitudes([0.0, 1.0])
         fixed = {
@@ -122,12 +122,11 @@ class GateSequenceSolverTest(unittest.TestCase):
             4: GateOperation(gate=SUPPORTED_GATES["S"], targets=(0,)),
             5: GateOperation(gate=SUPPORTED_GATES["Z"], targets=(0,)),
         }
-        layer_constraints = {6: ["H", "S", "Z"]}
         solver = GateSequenceSolver(
             num_qubits=1,
             allowed_gates=["H", "S", "Z", "X"],
             fixed_operations=fixed,
-            layer_gate_allowlists=layer_constraints,
+            default_layer_gate_allowlist=["H", "S", "Z"],
         )
         result = solver.solve(start, target, max_layers=7)
         self.assertTrue(result.success)
@@ -140,6 +139,52 @@ class GateSequenceSolverTest(unittest.TestCase):
         self.assertAlmostEqual(final[1].real, target.amplitudes[1].real, places=7)
         self.assertAlmostEqual(final[0].imag, target.amplitudes[0].imag, places=7)
         self.assertAlmostEqual(final[1].imag, target.amplitudes[1].imag, places=7)
+
+    def test_layer_gate_constraints_still_supported(self) -> None:
+        start = QuantumState.from_amplitudes([1.0, 0.0])
+        target = QuantumState.from_amplitudes([0.0, 1.0])
+        solver = GateSequenceSolver(
+            num_qubits=1,
+            allowed_gates=["H", "S"],
+            layer_gate_allowlists={0: ["H"]},
+        )
+        result = solver.solve(start, target, max_layers=4)
+        self.assertTrue(result.success)
+        self.assertEqual([op.gate.name for op in result.sequence], ["H", "S", "S", "H"])
+        self.assertAlmostEqual(result.distance, 0.0, places=7)
+
+    def test_puzzle_with_fixed_prefix_and_global_choices(self) -> None:
+        start = QuantumState.from_amplitudes([1.0, 0.0])
+        target = QuantumState.from_amplitudes([
+            complex(1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0)),
+            0.0,
+        ])
+        identity = GateOperation(gate=SUPPORTED_GATES["I"], targets=(0,))
+        fixed_prefix = {
+            0: GateOperation(gate=SUPPORTED_GATES["H"], targets=(0,)),
+            1: GateOperation(gate=SUPPORTED_GATES["S"], targets=(0,)),
+            2: GateOperation(gate=SUPPORTED_GATES["H"], targets=(0,)),
+            3: identity,
+            4: GateOperation(gate=SUPPORTED_GATES["S"], targets=(0,)),
+            5: GateOperation(gate=SUPPORTED_GATES["S"], targets=(0,)),
+            6: GateOperation(gate=SUPPORTED_GATES["S"], targets=(0,)),
+            7: GateOperation(gate=SUPPORTED_GATES["S"], targets=(0,)),
+        }
+        solver = GateSequenceSolver(
+            num_qubits=1,
+            allowed_gates=["H", "S", "I", "Y", "Z", "X"],
+            fixed_operations=fixed_prefix,
+            default_layer_gate_allowlist=["S", "H", "Y", "Z", "X", "I"],
+        )
+        result = solver.solve(start, target, max_layers=14)
+        self.assertTrue(result.success)
+        self.assertEqual(len(result.sequence), 14)
+        self.assertEqual(
+            [op.gate.name for op in result.sequence[:8]], ["H", "S", "H", "I", "S", "S", "S", "S"]
+        )
+        tail = [op.gate.name for op in result.sequence[8:]]
+        self.assertEqual(tail, ["S", "H", "I", "I", "I", "I"])
+        self.assertAlmostEqual(result.distance, 0.0, places=7)
 
     def test_layer_gate_constraint_conflict_with_fixed_gate_raises(self) -> None:
         fixed = {0: GateOperation(gate=SUPPORTED_GATES["H"], targets=(0,))}

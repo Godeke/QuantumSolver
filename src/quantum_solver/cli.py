@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from .gates import GateOperation, SUPPORTED_GATES
 from .persistence import result_to_payload, write_result
@@ -26,6 +26,24 @@ def _parse_amplitudes(raw: Sequence[Sequence[float]], label: str) -> QuantumStat
         return QuantumState.from_real_imag_pairs(raw)
     except ValueError as exc:
         raise ValueError(f"Invalid {label} state: {exc}") from exc
+
+
+def _parse_gate_list(raw: object, *, field_name: str) -> Optional[List[str]]:
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)):
+        raise ValueError(f"Configuration field '{field_name}' must be a list.")
+    cleaned: List[str] = []
+    seen: set[str] = set()
+    for gate_name in raw:
+        if not isinstance(gate_name, str):
+            raise ValueError(f"Entries in '{field_name}' must be gate symbols.")
+        if gate_name not in seen:
+            cleaned.append(gate_name)
+            seen.add(gate_name)
+    if not cleaned:
+        raise ValueError(f"Configuration field '{field_name}' must list at least one gate.")
+    return cleaned
 
 
 def _parse_fixed_gates(raw: object, *, num_qubits: int) -> Dict[int, GateOperation]:
@@ -106,21 +124,9 @@ def _parse_layer_gate_constraints(raw: object) -> Dict[int, List[str]]:
         layer_index = step - 1
 
         allowed_raw = item.get("allowed_gates") or item.get("allowed")
-        if not isinstance(allowed_raw, (list, tuple)):
+        allowed = _parse_gate_list(allowed_raw, field_name="layer_gate_constraints.allowed_gates")
+        if allowed is None:
             raise ValueError(f"Layer gate constraint at step {step} must list 'allowed_gates'.")
-        allowed: List[str] = []
-        seen: set[str] = set()
-        for gate_name in allowed_raw:
-            if not isinstance(gate_name, str):
-                raise ValueError(
-                    f"Layer gate constraint at step {step} includes a non-string gate name."
-                )
-            if gate_name not in seen:
-                allowed.append(gate_name)
-                seen.add(gate_name)
-
-        if not allowed:
-            raise ValueError(f"Layer gate constraint at step {step} must list at least one gate.")
         if layer_index in constraints:
             raise ValueError(f"Multiple gate constraints defined for step {step}.")
         constraints[layer_index] = allowed
@@ -236,12 +242,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
+    try:
+        global_layer_gates = _parse_gate_list(
+            config.get("global_allowed_gates"), field_name="global_allowed_gates"
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     solver = GateSequenceSolver(
         num_qubits=num_qubits,
         allowed_gates=allowed_gates,
         tolerance=float(config.get("tolerance", 1e-6)),
         fixed_operations=fixed_gates,
         layer_gate_allowlists=layer_gate_constraints,
+        default_layer_gate_allowlist=global_layer_gates,
     )
     result = solver.solve(initial_state, target_state, max_layers=max_layers)
     _print_result(result, num_qubits=num_qubits, max_layers=max_layers)

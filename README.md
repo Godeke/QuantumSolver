@@ -8,7 +8,7 @@ The project uses the Python standard library only. Any Python 3.10+ interpreter 
 
 ## Usage
 
-1. Prepare a JSON configuration describing the initial and target states. Examples are provided in `examples/bell_state.json` and `examples/fixed_gate_compensation.json`.
+1. Prepare a JSON configuration describing the initial and target states. Examples are provided in `examples/bell_state.json`, `examples/fixed_gate_compensation.json`, and `examples/layer_constraints_with_global.json`.
 2. Run the solver:
    ```bash
    PYTHONPATH=src python3 -m quantum_solver.cli --config examples/bell_state.json
@@ -35,6 +35,10 @@ The project uses the Python standard library only. Any Python 3.10+ interpreter 
 - `layer_gate_constraints` (list[object], optional): Restrict which gates may be used at particular steps.
   Each entry provides a 1-based `step` and an `allowed_gates` list specifying the permitted symbols for
   that layer.
+- `global_allowed_gates` (list[str], optional): Default gate symbols permitted on any unfixed layer.
+  Layer-specific constraints override this list when provided.
+  The solver pads any remaining layers with the identity gate when it is permitted so timelines stay
+  aligned with the configured depth.
 - `tolerance` (float, optional): Distance threshold for considering the target reached. Defaults to `1e-6`.
 - `output_path` (str, optional): Persist solver results as JSON. Equivalent to the `--output` CLI flag.
 

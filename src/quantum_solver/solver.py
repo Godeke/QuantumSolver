@@ -38,6 +38,7 @@ class GateSequenceSolver:
         quantisation_decimals: int = 8,
         fixed_operations: Optional[Dict[int, GateOperation]] = None,
         layer_gate_allowlists: Optional[Dict[int, Sequence[str]]] = None,
+        default_layer_gate_allowlist: Optional[Sequence[str]] = None,
     ) -> None:
         if num_qubits <= 0:
             raise ValueError("Solver must operate on at least one qubit.")
@@ -57,6 +58,10 @@ class GateSequenceSolver:
         self._operations_by_gate: Dict[str, List[GateOperation]] = {}
         for operation in self.operations:
             self._operations_by_gate.setdefault(operation.gate.name, []).append(operation)
+        self._identity_operation: Optional[GateOperation] = None
+        identity_candidates = self._operations_by_gate.get("I")
+        if identity_candidates:
+            self._identity_operation = identity_candidates[0]
         self.fixed_operations: Dict[int, GateOperation] = (
             dict(fixed_operations) if fixed_operations is not None else {}
         )
@@ -94,6 +99,26 @@ class GateSequenceSolver:
                         )
                     operations.extend(ops)
                 self._layer_specific_operations[layer] = tuple(operations)
+        self._default_layer_operations: Optional[Tuple[GateOperation, ...]] = None
+        if default_layer_gate_allowlist is not None:
+            default_names = tuple(dict.fromkeys(default_layer_gate_allowlist))
+            if not default_names:
+                raise ValueError("Global gate allowlist must list at least one gate.")
+            unknown_default = [name for name in default_names if name not in gate_names]
+            if unknown_default:
+                raise ValueError(
+                    f"Global gate allowlist references unsupported gates: {unknown_default}."
+                )
+            default_ops: List[GateOperation] = []
+            for name in default_names:
+                ops = self._operations_by_gate.get(name)
+                if not ops:
+                    raise ValueError(
+                        f"Global gate allowlist references gate '{name}' which has no operations "
+                        f"for {self.num_qubits} qubits."
+                    )
+                default_ops.extend(ops)
+            self._default_layer_operations = tuple(default_ops)
         for layer, operation in self.fixed_operations.items():
             allowed = self._layer_specific_operations.get(layer)
             if allowed is not None and operation not in allowed:
@@ -137,7 +162,43 @@ class GateSequenceSolver:
         constrained = self._layer_specific_operations.get(depth)
         if constrained is not None:
             return constrained
+        if self._default_layer_operations is not None:
+            return self._default_layer_operations
         return self.operations
+
+    def _select_identity_for_layer(self, depth: int) -> Optional[GateOperation]:
+        fixed_operation = self.fixed_operations.get(depth)
+        if fixed_operation is not None:
+            return fixed_operation
+        constrained = self._layer_specific_operations.get(depth)
+        if constrained is not None:
+            for operation in constrained:
+                if operation.gate.name == "I":
+                    return operation
+            return None
+        if self._default_layer_operations is not None:
+            for operation in self._default_layer_operations:
+                if operation.gate.name == "I":
+                    return operation
+        if self._identity_operation is not None:
+            return self._identity_operation
+        for operation in self.operations:
+            if operation.gate.name == "I":
+                return operation
+        return None
+
+    def _pad_sequence_to_layers(
+        self, sequence: Sequence[GateOperation], *, max_layers: int
+    ) -> List[GateOperation]:
+        if len(sequence) >= max_layers:
+            return list(sequence)
+        padded = list(sequence)
+        for depth in range(len(sequence), max_layers):
+            identity_op = self._select_identity_for_layer(depth)
+            if identity_op is None:
+                break
+            padded.append(identity_op)
+        return padded
 
     def _fixed_layers_satisfied(self, sequence_length: int) -> bool:
         if not self._fixed_layers:
@@ -210,16 +271,17 @@ class GateSequenceSolver:
                     best_state = new_state
                     best_sequence = list(new_sequence)
 
-                if new_distance <= self.tolerance and self._fixed_layers_satisfied(
-                    len(new_sequence)
-                ):
-                    states = self._evolve_states(start, new_sequence)
+                if new_distance <= self.tolerance and self._fixed_layers_satisfied(len(new_sequence)):
+                    final_sequence = self._pad_sequence_to_layers(new_sequence, max_layers=max_layers)
+                    states = self._evolve_states(start, final_sequence)
+                    final_state = states[-1] if states else start.copy()
+                    final_distance = final_state.distance(target)
                     return SolverResult(
                         success=True,
-                        sequence=new_sequence,
+                        sequence=final_sequence,
                         layers_used=len(new_sequence),
-                        final_state=states[-1] if states else start.copy(),
-                        distance=new_distance,
+                        final_state=final_state,
+                        distance=final_distance,
                         states=states,
                     )
 
