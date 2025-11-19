@@ -4,23 +4,38 @@ Constraint solver for quantum states using standard quantum gates.
 
 ## Requirements
 
-The project uses the Python standard library only. Any Python 3.10+ interpreter should work.
+The project targets Python 3.10+ and relies on `pytest` for the test suite. Use a per-project
+virtual environment so dependencies remain isolated.
+
+```bash
+$ scripts/quantum_solver.sh setup
+```
+
+The helper script creates `.venv/`, upgrades `pip`, and installs `requirements-dev.txt`. Run it once
+before invoking other commands and rerun whenever dependencies change. Reactivate the environment later
+with `source .venv/bin/activate` if you want to run commands manually.
 
 ## Usage
 
 1. Prepare a JSON configuration describing the initial and target states. Examples are provided in `examples/bell_state.json`, `examples/fixed_gate_compensation.json`, and `examples/layer_constraints_with_global.json`.
-2. Run the solver:
+2. Run the solver through the helper script (after `setup`):
    ```bash
-   PYTHONPATH=src python3 -m quantum_solver.cli --config examples/bell_state.json
+   scripts/quantum_solver.sh solver --config examples/bell_state.json
    ```
    Use `--max-layers`, `--allowed-gates`, `--output`, or `--no-timeline` to control execution. For example:
    ```bash
-   PYTHONPATH=src python3 -m quantum_solver.cli \
+   scripts/quantum_solver.sh solver \
      --config examples/bell_state.json \
      --output artifacts/bell_result.json
    ```
    The `--output -` form prints the persisted result JSON to stdout.
    The CLI renders an ASCII timeline by default to help visualise the state after each gate.
+
+To run the tests, execute:
+
+```bash
+scripts/quantum_solver.sh test
+```
 
 ## Configuration schema
 
@@ -44,5 +59,5 @@ The project uses the Python standard library only. Any Python 3.10+ interpreter 
 
 ## Supported gates
 
-Single-qubit: `I`, `X`, `Y`, `Z`, `H`, `S`, `T`  
+Single-qubit: `I`, `X`, `Y`, `Z`, `H`, `S`, `SX`, `T`  
 Two-qubit: `CNOT` (control listed first).

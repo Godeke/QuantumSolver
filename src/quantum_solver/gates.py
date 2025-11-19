@@ -187,6 +187,14 @@ S_GATE = _create_single_qubit_gate(
     ],
 )
 
+SX_GATE = _create_single_qubit_gate(
+    "SX",
+    [
+        [0.5 + 0.5j, 0.5 - 0.5j],
+        [0.5 - 0.5j, 0.5 + 0.5j],
+    ],
+)
+
 T_GATE = _create_single_qubit_gate(
     "T",
     [
@@ -215,5 +223,5 @@ CNOT_GATE = _create_two_qubit_gate(
 
 SUPPORTED_GATES = {
     gate.name: gate
-    for gate in (X_GATE, Y_GATE, Z_GATE, H_GATE, S_GATE, T_GATE, ID_GATE, CNOT_GATE)
+    for gate in (X_GATE, Y_GATE, Z_GATE, H_GATE, S_GATE, SX_GATE, T_GATE, ID_GATE, CNOT_GATE)
 }
